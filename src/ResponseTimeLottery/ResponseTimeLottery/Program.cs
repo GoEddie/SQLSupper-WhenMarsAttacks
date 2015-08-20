@@ -1,9 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.Diagnostics;
-using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -11,43 +8,74 @@ namespace ResponseTimeLottery
 {
     class Program
     {
-        static void Main(string[] args)
+        private static int QueryCompletions;
+        private static object _lock;
+
+        private static void Main()
         {
+            //QUERIES
+
             var query1 = "SELECT 1980 --the year that god made me";
-            var query2 = "WAITFOR DELAY '0:0:5'";
-            
+            //var query2 = "WAITFOR DELAY '0:0:5'";
+            var query2 =
+                "select 1000; select top 1000 * from sys.sysindexes cross join sys.sysobjects;create table #ddd(id int); drop table #ddd";
+
+            _lock = new object();
 
             while (true)
             {
+                //Create MARS connection  
                 var connection = new SqlConnection("Server=.;Integrated Security=SSPI;MultipleActiveResultSets=true;");
                 connection.Open();
 
-                Task.Factory.StartNew(() => { RunQuery(connection, query1); }, TaskCreationOptions.LongRunning);
-                Task.Factory.StartNew(() => { RunQuery(connection, query2); }, TaskCreationOptions.LongRunning);
+                QueryCompletions = 0;
 
-                Console.WriteLine("Tasks Scheduled...");
-                Console.ReadLine();
+                //Run queries on seperate threads
+                Task.Factory.StartNew(() => { RunQuery(connection, query2); }, TaskCreationOptions.LongRunning);
+                Task.Factory.StartNew(() => { RunQuery(connection, query1); }, TaskCreationOptions.LongRunning);
+
+                lock (_lock)
+                    Console.WriteLine("Tasks Scheduled...");
+
+                //Wait for them both to finish
+                while (QueryCompletions < 2)
+                    Thread.Sleep(100);
+
                 connection.Close();
             }
         }
 
-
-        static void RunQuery(SqlConnection connection, string query)
+        private static void RunQuery(SqlConnection connection, string query)
         {
-
-            Console.WriteLine("Running Query: {0}", query);
-            var timer = StartTimer();
-
             var cmd = connection.CreateCommand();
+            cmd.CommandTimeout = 60*1000;
             cmd.CommandText = query;
+
+            var timer = StartTimer();
+            //run query
             var reader = cmd.ExecuteReader();
 
-            while (reader.Read());
-        
+            //read off the full response
+            while (reader.Read()) ;
+
             timer.Stop();
 
-            Console.WriteLine("Query: {0} took: {1} ms", query, timer.ElapsedMilliseconds);
+            lock (_lock)
+            {
+                if (timer.ElapsedMilliseconds > 10)
+                    Console.ForegroundColor = ConsoleColor.Red;
 
+                if (timer.ElapsedMilliseconds < 10)
+                    Console.ForegroundColor = ConsoleColor.Green;
+
+                Console.WriteLine("Query: {0} took: {1} ms", query, timer.ElapsedMilliseconds);
+
+
+                Console.ForegroundColor = ConsoleColor.White;
+            }
+
+
+            Interlocked.Increment(ref QueryCompletions);
         }
 
         private static Stopwatch StartTimer()
@@ -56,7 +84,5 @@ namespace ResponseTimeLottery
             sw.Start();
             return sw;
         }
-
-        
     }
 }
