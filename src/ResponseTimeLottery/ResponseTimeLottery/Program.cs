@@ -13,18 +13,17 @@ namespace ResponseTimeLottery
 
         private static void Main()
         {
-            //MarsConnection();
-            MultipleConnections();
+            var query1 = "SELECT 1980 --SHOULD BE FAST";
+            var query2 = "waitfor delay '0:00:0.15';select 1000; select top 1000 * from sys.sysindexes cross join sys.sysobjects s cross join sys.sysprocesses cross join sys.all_sql_modules;create table #ddd(id int); drop table #ddd";
+
+            MarsConnection(query1, query2);
+            //MarsConnection(query2, query1);
+            
+            
+            // MultipleConnections(query2, query1);
         }
 
-        private static void MarsConnection(){
-
-        //QUERIES
-
-            var query1 = "SELECT 1980 --the year that god made me";
-            //var query2 = "WAITFOR DELAY '0:0:5'";
-            var query2 =
-                "select 1000; select top 1000 * from sys.sysindexes cross join sys.sysobjects;create table #ddd(id int); drop table #ddd";
+        private static void MarsConnection(string query1, string query2){
 
             _lock = new object();
 
@@ -40,7 +39,7 @@ namespace ResponseTimeLottery
                 //Run queries on seperate threads
                 Task.Factory.StartNew(() => { RunQuery(connection, query2); }, TaskCreationOptions.LongRunning);
                 Task.Factory.StartNew(() => { RunQuery(connection, query1); }, TaskCreationOptions.LongRunning);
-                
+
                 lock (_lock)
                     Console.WriteLine("Tasks Scheduled...");
 
@@ -52,15 +51,8 @@ namespace ResponseTimeLottery
             }
         }
 
-        private static void MultipleConnections()
+        private static void MultipleConnections(string query1, string query2)
         {
-            //QUERIES
-
-            var query1 = "SELECT 1980 --the year that god made me";
-            //var query2 = "WAITFOR DELAY '0:0:5'";
-            var query2 =
-                "select 1000; select top 1000 * from sys.sysindexes cross join sys.sysobjects;create table #ddd(id int); drop table #ddd";
-
             _lock = new object();
 
             while (true)
@@ -105,7 +97,13 @@ namespace ResponseTimeLottery
             var reader = cmd.ExecuteReader();
 
             //read off the full response
-            while (reader.Read()) ;
+            while(reader.NextResult())
+            {
+                while (reader.Read())
+                {
+                    
+                };
+            }
 
             timer.Stop();
 
